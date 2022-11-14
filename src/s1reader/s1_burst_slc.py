@@ -422,15 +422,16 @@ class Sentinel1BurstSlc:
         Parameters
         -------
         xstep : int
-           spacing along x direction (range direction) in units of pixels
+           spacing along x direction (range direction) in units of meters
 
         ystep : int
-           spacing along y direction (azimuth direction) in units of pixels
+           spacing along y direction (azimuth direction) in units of seconds
 
         Returns
         -------
            LUT2D object of bistatic delay correction in seconds as a function
-           of the range and zimuth indices. This correction needs to be added
+           of the range and azimuth indices expressed in meters and seconds,
+           respectively. This correction needs to be added
            to the SLC tagged azimuth time to get the corrected azimuth times.
         '''
 
@@ -438,12 +439,12 @@ class Sentinel1BurstSlc:
         tau0 = self.rank * pri
         tau_mid = self.iw2_mid_range * 2.0 / isce3.core.speed_of_light
 
-        nx = np.ceil(self.width / xstep).astype(int)
-        ny = np.ceil(self.length / ystep).astype(int)
+        nx = np.ceil(self.width * self.range_pixel_spacing / xstep).astype(int)
+        ny = np.ceil(self.length * self.azimuth_time_interval / ystep).astype(int)
         x = np.arange(0, nx*xstep, xstep, dtype=int)
         y = np.arange(0, ny*ystep, ystep, dtype=int)
 
-        slant_range = self.starting_range + x * self.range_pixel_spacing
+        slant_range = self.starting_range + x
         tau = slant_range * 2.0 / isce3.core.speed_of_light
 
         # the first term (tau_mid/2) is the bulk bistatic delay which was
@@ -463,7 +464,7 @@ class Sentinel1BurstSlc:
         Compute total Doppler which is the sum of two components:
         (1) the geometrical Doppler induced by the relative movement
         of the sensor and target
-        (2) the TOPS specicifc Doppler caused by the electric steering
+        (2) the TOPS specific Doppler caused by the electric steering
         of the beam along the azimuth direction resulting in Doppler varying
         with azimuth time.
         Parameters
@@ -475,28 +476,27 @@ class Sentinel1BurstSlc:
 
         Returns
         -------
-        x : int
-           The index of samples in range direction as an 1D array
-        y : int
-           The index of samples in azimuth direction as an 1D array
-        total_doppler : float
-           Total Doppler which is the sum of the geometrical Doppler and
-           beam steering induced Doppler [Hz] as a 2D array
+           LUT2D object of total Doppler whicj is the sum of the geometrical
+           Doppler and beam steering induced Doppler [Hz]
+           of the range and azimuth indices expressed in meters and seconds,
+           respectively. This correction needs to be added
+           to the SLC tagged azimuth time to get the corrected azimuth times.
         """
 
-        x = np.arange(0, self.width, xstep, dtype=int)
-        y = np.arange(0, self.length, ystep, dtype=int)
+        x = np.arange(0, self.width * self.range_pixel_spacing, xstep, dtype=int)
+        y = np.arange(0, self.length * self.azimuth_time_interval, ystep, dtype=int)
         x_mesh, y_mesh = np.meshgrid(x, y)
         az_carr_comp = self.az_carrier_components(
                                         offset=0.0,
                                         position=(y_mesh, x_mesh))
 
-        slant_range = self.starting_range + x * self.range_pixel_spacing
+        slant_range = self.starting_range + x
         geometrical_doppler = self.doppler.poly1d.eval(slant_range)
 
         total_doppler = az_carr_comp.antenna_steering_doppler + geometrical_doppler
 
-        return x, y, total_doppler
+        return isce3.core.LUT2d(x, y, total_doppler)
+
 
     def doppler_induced_range_shift(self, xstep=500, ystep=50):
         """
